@@ -3,6 +3,7 @@ using FluentAssertions;
 using Kata.Core;
 using Kata.Core.Entities;
 using Moq.AutoMock;
+using System.Linq;
 using Xunit;
 
 namespace Kata.Tests
@@ -23,14 +24,40 @@ namespace Kata.Tests
         {
             // Arrange
             var subject = Mocker.CreateInstance<Checkout>();
-            var item = AutoFixture.Create<Item>();
+            var items = AutoFixture.Create<Item[]>().ToList();
+            var specialOffers = items.Select(i => new Item
+                {
+                    SKU = i.SKU,
+                    Quantity = AutoFixture.Create<int>(),
+                    UnitPrice = AutoFixture.Create<decimal>()
+                }
+            ).ToList();
+            var total = 0m;
+            Mocker.GetMock<IItemRepository>()
+                .Setup(ir => ir.GetSpecialOffers())
+                .Returns(specialOffers);
+
+            foreach (var item in items)
+            {
+                
+                var offer = specialOffers.FirstOrDefault(so => so.SKU == item.SKU);
+                if (offer != null && (item.Quantity >= offer.Quantity))
+                {
+                    var normalCost = (item.Quantity % offer.Quantity) * item.UnitPrice;
+                    var offerCost = (item.Quantity / offer.Quantity) * offer.UnitPrice;
+                    total += normalCost + offerCost;
+                }
+            }
+            foreach (var item in items)
+            {
+                subject.Scan(item);
+            }
 
             // Act
-            subject.Scan(item);
             var result = subject.Total();
 
             // Assert
-            result.Should().Be(item.Quantity * item.UnitPrice);
+            result.Should().Be(total);
         }
     }
 }
